@@ -9,6 +9,7 @@
       html, body {
         margin: 0;
         padding: 0;
+        width: 100%;
         height: 100%;
         /* Soft neutral gradient reminiscent of natural parchment */
         background: linear-gradient(135deg, #f7f2d5, #e9d2a5);
@@ -19,13 +20,21 @@
         overflow: hidden;
       }
 
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
       #container {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: flex-start;
-        min-height: 100vh;
-        padding: 20px;
+        justify-content: center;
+        width: 100vw;
+        height: 100vh;
+        padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+        gap: 10px;
       }
 
       /* Chessboard styling */
@@ -34,16 +43,17 @@
         grid-template-columns: repeat(8, 1fr);
         /* Make rows equal to columns so each square remains a perfect square */
         grid-template-rows: repeat(8, 1fr);
-        /* Maintain a square board that scales with the viewport using vmin units */
-        /* vmin uses the smaller of viewport width/height, ensuring even squares on all screens */
-        width: 80vmin;
-        height: 80vmin;
+        width: min(84vw, 68vh);
+        height: min(84vw, 68vh);
+        max-width: 720px;
+        max-height: 720px;
         /* Classic brown border similar to standard wooden boards */
         border: 4px solid #8b5a2b;
         border-radius: 8px;
         overflow: hidden; /* prevent glowing selection from spilling out */
         box-shadow: 0 6px 12px rgba(0,0,0,0.45);
-        margin-bottom: 20px;
+        margin: 0 auto;
+        flex-shrink: 0;
       }
 
       .square {
@@ -113,17 +123,21 @@
       /* Clock styling */
       #clock {
         display: flex;
-        gap: 20px;
+        gap: 10px;
         align-items: center;
-        margin-bottom: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+        width: min(92vw, 760px);
+        margin-bottom: 8px;
       }
       .clock-display {
-        padding: 10px 20px;
+        padding: 10px 16px;
         border-radius: 6px;
         font-size: 18px;
-        min-width: 90px;
+        min-width: 110px;
         text-align: center;
         box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+        flex: 0 1 auto;
       }
 
       /* Labels for clocks */
@@ -144,8 +158,8 @@
         color: #f0f4fa;
       }
       #pause, #draw, #new-game {
-        padding: 10px 20px;
-        font-size: 16px;
+        padding: 10px 16px;
+        font-size: 15px;
         /* Refined button palette inspired by natural greens; complements the wooden board */
         background: linear-gradient(180deg, #5c8f5a, #3a5c3c);
         color: #ffffff;
@@ -167,7 +181,7 @@
 
       /* Input field styling */
       #clock-input {
-        width: 60px;
+        width: 64px;
         padding: 8px;
         border-radius: 4px;
         border: 1px solid #546683;
@@ -179,9 +193,63 @@
         margin-right: 4px;
       }
       #status {
-        margin-top: 10px;
+        margin-top: 8px;
         font-weight: bold;
         font-size: 16px;
+        min-height: 24px;
+        text-align: center;
+        width: min(92vw, 760px);
+      }
+
+      @media (max-width: 700px) {
+        #container {
+          gap: 8px;
+          padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        }
+
+        #clock {
+          gap: 8px;
+          width: 96vw;
+        }
+
+        #board {
+          width: min(96vw, 58vh);
+          height: min(96vw, 58vh);
+        }
+
+        .clock-display {
+          min-width: 96px;
+          padding: 8px 12px;
+          font-size: 16px;
+        }
+
+        .clock-label {
+          font-size: 12px;
+        }
+
+        .clock-time {
+          font-size: 18px;
+        }
+
+        #pause, #draw, #new-game {
+          padding: 8px 12px;
+          font-size: 14px;
+          margin-right: 0;
+        }
+
+        #clock-input {
+          width: 58px;
+          font-size: 14px;
+        }
+
+        .piece {
+          font-size: 8.6vmin;
+        }
+
+        .square[data-show-file="true"]::after,
+        .square[data-show-rank="true"]::before {
+          font-size: max(10px, 2.2vmin);
+        }
       }
 
       /* Chess piece styling
