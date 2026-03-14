@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chess Game</title>
+    <style>
+      /* Basic reset and typography */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        /* Soft neutral gradient reminiscent of natural parchment */
+        background: linear-gradient(135deg, #f7f2d5, #e9d2a5);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        -webkit-user-select: none; /* prevent text selection on mobile */
+        user-select: none;
+        /* Prevent any page scrolling; board and controls will adjust within viewport */
+        overflow: hidden;
+      }
+
+      #container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      /* Chessboard styling */
+      #board {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        /* Make rows equal to columns so each square remains a perfect square */
+        grid-template-rows: repeat(8, 1fr);
+        /* Maintain a square board that scales with the viewport using vmin units */
+        /* vmin uses the smaller of viewport width/height, ensuring even squares on all screens */
+        width: 80vmin;
+        height: 80vmin;
+        /* Classic brown border similar to standard wooden boards */
+        border: 4px solid #8b5a2b;
+        border-radius: 8px;
+        overflow: hidden; /* prevent glowing selection from spilling out */
+        box-shadow: 0 6px 12px rgba(0,0,0,0.45);
+        margin-bottom: 20px;
+      }
+
+      .square {
+        position: relative;
+        /* Use the full size of the grid cell so that the board scales with the viewport */
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Scale piece size relative to the viewport for crisp, larger pieces */
+        font-size: 6vmin;
+        cursor: pointer;
+        transition: box-shadow 0.25s ease, transform 0.1s ease;
+        /* Provide a stacking context for coordinate labels.  Labels are added
+           using ::before and ::after pseudo elements on squares in the
+           outermost file and rank. */
+      }
+
+      /* Add rank (numbers) and file (letters) on the board.  We show the
+         rank number in the upper left of squares in the leftmost column and
+         the file letter in the lower right of squares on the bottom row.
+         Only squares with the attributes data-show-rank="true" or
+         data-show-file="true" will display these labels.  The font size
+         scales with the viewport so it remains legible on various screen
+         sizes. */
+      .square[data-show-file="true"]::after {
+        content: attr(data-file);
+        position: absolute;
+        right: 4px;
+        bottom: 4px;
+        font-size: 1.4vmin;
+        color: #444;
+        pointer-events: none;
+      }
+      .square[data-show-rank="true"]::before {
+        content: attr(data-rank);
+        position: absolute;
+        left: 4px;
+        top: 4px;
+        font-size: 1.4vmin;
+        color: #444;
+        pointer-events: none;
+      }
+
+      /* Classic board colors reminiscent of standard chess.com boards */
+      .light {
+        background: radial-gradient(circle at 25% 25%, #f0d9b5 0%, #ecd2a1 100%);
+      }
+      .dark {
+        background: radial-gradient(circle at 25% 25%, #b58863 0%, #8d6533 100%);
+      }
+
+      /* Luminous halo for selected squares */
+      .selected {
+        box-shadow: 0 0 20px 6px rgba(255, 215, 0, 0.85), inset 0 0 15px rgba(255, 215, 0, 0.5);
+        transform: scale(1.05);
+        z-index: 2;
+      }
+
+      /* Highlight potential legal move squares for the selected piece */
+      .legal-move {
+        box-shadow: inset 0 0 0 3px rgba(70, 200, 240, 0.8), 0 0 12px rgba(70, 200, 240, 0.6);
+        position: relative;
+      }
+
+      /* Clock styling */
+      #clock {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      .clock-display {
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-size: 18px;
+        min-width: 90px;
+        text-align: center;
+        box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Labels for clocks */
+      .clock-label {
+        font-size: 14px;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 2px;
+      }
+
+      /* Clock color themes: white player's clock uses light background with dark text; black player's clock uses dark background with light text */
+      #white-clock.clock-display {
+        background: linear-gradient(180deg, #e6eaf2, #d3d9e3);
+        color: #2e3a54;
+      }
+      #black-clock.clock-display {
+        background: linear-gradient(180deg, #3d5472, #2c3e50);
+        color: #f0f4fa;
+      }
+      #pause, #draw, #new-game {
+        padding: 10px 20px;
+        font-size: 16px;
+        /* Refined button palette inspired by natural greens; complements the wooden board */
+        background: linear-gradient(180deg, #5c8f5a, #3a5c3c);
+        color: #ffffff;
+        border: 1px solid #2b4430;
+        border-radius: 6px;
+        cursor: pointer;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+        transition: background 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
+        margin-right: 4px;
+      }
+      #pause:hover, #draw:hover, #new-game:hover {
+        background: linear-gradient(180deg, #6fa36b, #486d50);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+      }
+      #pause:active, #draw:active, #new-game:active {
+        transform: translateY(1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+      }
+
+      /* Input field styling */
+      #clock-input {
+        width: 60px;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #546683;
+        background: #f3f6fc;
+        color: #2e3a54;
+        font-size: 16px;
+        text-align: center;
+        box-shadow: inset 0 0 4px rgba(0,0,0,0.2);
+        margin-right: 4px;
+      }
+      #status {
+        margin-top: 10px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+
+      /* Chess piece styling
+         We render pieces using their Unicode glyphs. To ensure the white pieces have
+         solid fill and crisp black edges (and vice versa for black pieces), we use
+         the `-webkit-text-stroke` property supported by modern browsers. This
+         avoids the need for external images and guarantees the board never shows
+         through the characters.
+      */
+      .piece {
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none; /* so clicks register on the square */
+        font-size: 8vmin; /* increase size so pieces nearly fill each square */
+      }
+      .white-piece {
+        color: #ffffff;            /* white fill */
+        /* Use multiple text shadows instead of text stroke to produce a crisp outline
+           around the glyph. Offsetting shadows in each cardinal direction creates a
+           solid black contour without leaving hollow areas. An additional blurred
+           shadow adds subtle depth. */
+        text-shadow:
+          -0.4vmin -0.4vmin 0 #000,
+           0.4vmin -0.4vmin 0 #000,
+          -0.4vmin  0.4vmin 0 #000,
+           0.4vmin  0.4vmin 0 #000,
+           0 0 0.4vmin rgba(0,0,0,0.5);
+      }
+      .black-piece {
+        color: #000000;            /* black fill */
+        /* Create a white outline around black glyphs using offset shadows. A
+           faint blurred shadow ensures the edge feels smooth. */
+        text-shadow:
+          -0.4vmin -0.4vmin 0 #fff,
+           0.4vmin -0.4vmin 0 #fff,
+          -0.4vmin  0.4vmin 0 #fff,
+           0.4vmin  0.4vmin 0 #fff,
+           0 0 0.4vmin rgba(255,255,255,0.5);
+      }
+
+      /* Image-based pieces. When using piece images (PNG), these classes
+         ensure the images fill the square nicely and have appropriate
+         outlines for each color. We keep these definitions even when
+         rendering glyphs; the images will be used whenever the board
+         requests them via PIECE_IMAGES. */
+      .piece-img {
+        width: 94%;
+        height: 94%;
+        object-fit: contain;
+        display: block;
+        pointer-events: none; /* prevent images from intercepting clicks */
+      }
+      .white-img {
+        /* Give white pieces a subtle black outline */
+        filter: drop-shadow(0 0 0 #000) drop-shadow(0 0 2px #000);
+      }
+      .black-img {
+        /* Darken black pieces slightly and give a white outline */
+        filter: brightness(0.85) drop-shadow(0 0 0 #fff) drop-shadow(0 0 2px #fff);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="clock">
+        <div id="white-clock" class="clock-display">
+          <span class="clock-label">White</span><br>
+          <span class="clock-time">05:00</span>
+        </div>
+        <div id="black-clock" class="clock-display">
+          <span class="clock-label">Black</span><br>
+          <span class="clock-time">05:00</span>
+        </div>
+        <button id="pause">Pause</button>
+        <!-- Input to set clock time in minutes -->
+        <input type="number" id="clock-input" value="5" min="1" step="1" title="Minutes per side">
+        <!-- New Game button resets the board and applies the time specified in the input -->
+        <button id="new-game">New Game</button>
+        <button id="draw">Draw</button>
+      </div>
+      <div id="board"></div>
+      <div id="status"></div>
+    </div>
+    <!--
+      Embedded piece images.  To ensure the chess pieces render correctly on
+      devices like iPhones where local filesystem access may be restricted,
+      we embed all piece images as base64‑encoded data URIs inside a
+      <script> tag of type application/json.  The JSON object keys
+      correspond to the two‑character codes for each piece (e.g. "wk" for
+      white king, "bp" for black pawn).
+    -->
+    <script id="piece-data" type="application/json">
+      {"wk": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAKzklEQVR42u1cB2wUSRYdG0ywjQEbfJhgRM7BlsBw5CByFMEsEgg4ZPZY4sGtl2xyPhGWsIQjiswBC/jIIMMSThwc8RAgEySiwWSMwcy/euWqoaY94xnj7tkx11968njcXV39un6o/3/bYjHFFFNMMcUUU0wxxRTvE18BU75CAhn+KhBo0pF1iWYggWiTjqzLDwypAj+YdLgWP4ZghhChsj8qBP4ovgsRx/iZdGWUWIYURW2dIUUca4pG4t0gTyLepCujhDP8xBDHMJ5hP0OawH7xXZw4Jtyky7V8r9jA7006TC9sEpjTJEYhMMakw33Jz9CW4TKDVQCf24i/mZKJFGPYkUn4sl0cY4oDKciQIIiyFilSxNq7d28C8FmsRBLHBJl0ZZRfpMrWqVOHbt++TSkpKRy3bt0ifKeo9C8mXfbShOEFVlhYWBg9fPiQIFarlQPy4MED/jexCpMZGpu0fUki/CxVd8eOHTbypMjP27dvJ0WVf/5WkwqFGf4gbJo7Ant2C6RERkZ+Yc2JRERESAJvumELc4kMTlbm87usoL8wnGN4KtQLeM7wjOFfDFMZKjk5P0R62cmTJ2dYfdpVOGnSJNUrhzgYDyHQ38VDeaaZTxLDCYahFi/IchdgmOwia2LV/I54rqcmnisq/75s2TJXC5CWLFmijlfEkl4zCWOYwPDexVy08/mbGMPH0+Q1ZLiuTi48PJwaNmxInTp1om7dulGHDh2oQYMGVLZsWcqVK5d28jj3TwyFxIPg38+ePdslgTNnzlQJiBLEJatzCQwMpGrVqlHz5s2pc+fOfD7t27enevXqUcmSJbUP9g3DYIa8niQvSU6gevXqtHbtWrp06RIlJyfbqdzz58/p2rVrtHfvXho9ejQVLVpUuyp+Y/iOIRG/DxgwwCWB/fv3l+d+YLitEhcVFWWdP38+nThxghITE+nt27e28z5//kxJSUl04cIFWr9+PTVt2lRL5HqLByqAoeKJ8YsPHz7c+v79e3JHPn78SK9fv6ZFixZRvnz51Im/E2RQxYoVXdrAChUqaG/cWqpUKeuBAwf4+CDK3fls2LBBO9Zuowm8KCc9btw4pzfrTOSxjx49otatW1Pu3Lkz2Mtnz545Pe/p06d2K9jPz4/69OnjNmmOxrxx4wYVK1ZMJXKBUeT9meETLtS2bVt69+4dfY2ohM+ZM4dCQkLsSJk3b57dcepPbOvkcbhpqKKjcbM6l4sXLxJbxaqj6aY3eaiEncTE8+TJQ6dOnfrqSWvPg72C6kpi8PnTp08ZjpsyZYrtGDishISEDLuV7MjmzZtVjUgQ8axu0sIiKmZYfdl56uq58vwrV65Q+fLl+eR9fHxo6NChdscePHiQ/P39+d+Z/aSzZ8+SXqLeQ+PGjSWBbxma6UUePNNP0k6dOXOG9BR5A/CO0ktjJWzdupV/D89eq1Yt2+pztNXTS06ePKnawhF6xYf5GP6BQQsWLGjI5OV4WGlwDLhWiRIleFJh+vTpNvKY1zeMPCksZpXXW6tXbIhA9z8YtFmzZobdgBxz+fLlNsJatmxpU92qVava4kwjr1+pUiV5/SMM/noQaNvsd+nSxbAnL28A3r1r164ZtmJr1qwxfPVB8KDENY8xBOhBIDbd/8agMLKeuAl4eZgLSV7NmjXp3r175Alh20BpAzcJ86WLDdyMQTE4eUg6duxoI7BXr16GXksuiKtXr6pOJFavrR080XDphePj4w1dhXLcIUOG2AiUYY3R14yOjpbXTBVVQN2kkUy516hRwyMrcNSoUTwmBPDZ6NV3/vx5CgoKkgSe17v6BzWOFzsRqzTo3wKBEOx8kPYS6ovt6jgj9sKtxW7Eil3DzZs3DVUrTxAo544MkchZkkiYGFZrmSNtYZMmTWz5Nj1I1I6B/KGRBMrrbdmyhfLnzy/JQ0a7itEprX9KEiMjIx1u/N0lyZF8+PCBjzls2DAbgWPGjMn2uI724KtXr1ZXHtDSExnpALkzAZCyv3PnTqY3k5qaypOdyFDDWK9YsYIT1KZNG6pSpQoVKFDAZVcqtnhlypThZQJkrpEKO3LkCD1+/JhevnxJSOxqr+3sd+QPkTZTQhb89GgHWBmGs/LiYWFhVqiCmtiEeoMsZH0HDx6MkqW6z9QVeIiIFRcuXEjHjx+3FeYdEYkCPeajkGeY03AlJRh2yptAmr5Hjx58VSABgH2z0kmQAXnz5uWrD4Uf3DzivtjYWJo6dSrNmjWLY9q0aTR+/HgaMWIE9e3blxeGIiIiKDg42Om4KCjhYQ0aNIiOHj1qR+TOnTv5+Qp5iPd6e0NN2JaWx+bf0UpDLQNPHolL9L1AnV+9esVXKtQPao46RVpamh1gD/E9emSwT4YpQFIBqwzZm7i4OK7WjsjEXPCQVq1aRd27d4ezUP+O/X01bymu/5HhhnyyMPyYfP369bm9A1nZMfzunovCkujm4plzJzXqFKE5XtepECp3K3jqKHM6835GhSSqJ1+3bh2vTQsHZVV2GH29uS8GrRTcrmVWdNKTyMzGwt8GDhyorsLy3kxeLkkgitawVa5uELYPBXCkr1B837hxI2/vWLx4MS1YsIADnhXfoXi/a9cuXoRCKVKO7yrWmzhxIineNjhHEAgPDAcBw48Y7f79+7Rnzx6aMGECT1PJApIeQDkSmWvsVvAA4KBevHhh04AcSSAyNnPnzuXpodKlS7tNhq+vL6+6BQQEcNsFICyB98xKDAkn0q5dOx5sKykqryfQVxKYGVDTxQpFXDd27FiupiiQI0bbt28fHTp0iMdvCIiBY8eO0eHDh2n//v1chTdt2sRVHG1usG/YzSh1jMzw2dsJ9Bc9eHYTR9IBwTHs3JMnT7h6IfaDeiPG+9q2DJwLb4uxYCYQG6LDADYTHWIOwhjZDuf9KxBqi3ZcdwQEIlAGGXAqIAR48+YNh/wdNg2kI+BGgO2OnDt3Tg2yrU4aMr3PBrZo0YLfqFZACDruT58+zdUVnhU9gSNHjuRta+jjg0oiDEIBq1GjRvxzq1ateEUQao/0PlY0dhe7d+/mxfDr16/btdapgmNznBPBTUvVvHz5Mi1dupT69evHbR+CbBh57Fb08MKFCxfmXh3NnT179uSOAw9ICrZ6OY5AtGKg/Q03Bk8quw0yA2xW8eLFecNmVFQUJwSrEJ9r167NnQ+8s6tx0BaC49DZgJWN9rccR6AWCEGwNy5UqBD3mFBXGHt4WMSIWRX0CaJHZ+XKlTyLg5dw0CaHkEfTc6giLScQ+ErpseMrD8WaGTNm8NAEwXV2tneZHQOvDKeB+gYSCkrfoTWneGHIFjX7gdWAXJ82L2dkMQpJXKiuyBmq5P2mV6uGkYJuJvTVJapEYncBmxQTE8PV1tX+NasrEP2FqJuUK1eO2z/moKwa1R2SE8jTdjPg/xzcs2R8d4PfHJwDMtDbtm3jYQg66BGKICiGqiNZICEDZfRP3717l4dACE8Q3oiGde37H8g0402CGXr1t/yegn7jdQyXLI5fhLGqIQky1/C6devW5SQjBV+5cmUKDQ3le2WL4xd4pJfF61+7LOlvuH9z/28L/6oErcIjLemdT//VIQ7ECt/DMJGhPUNly/+B+Ai1ChJhRQ1L+ss2aCNeJBwRSDnAcJDhV4ZtDMss6W8l9Weoa/nyAmF+i/kv8kwxxRRTTDHFFFNM8bD8D6shPZCVQvOPAAAAAElFTSuZZ=="}
+    </script>
+    <script>
+      // Chess game state and logic
+      (function() {
+        // Piece representations using Unicode chess characters for fallback.
+        // These remain in case future UI enhancements need the characters, but
+        // the board now uses image assets (see PIECE_IMAGES below) for
+        // rendering to ensure white pieces are opaque and blacks are dark.
+        const PIECE_UNICODE = {
+          'w': {
+            'k': '♔',
+            'q': '♕',
+            'r': '♖',
+            'b': '♗',
+            'n': '♘',
+            'p': '♙'
+          },
+          'b': {
+            'k': '♚',
+            'q': '♛',
+            'r': '♜',
+            'b': '♝',
+            'n': '♞',
+            'p': '♟'
+          }
+        };
+
+        /**
+         * Returns the relative file path for a given piece's image.
+         * Each piece image is stored in the `img/wikipedia` directory alongside this HTML file.
+         * Using image assets instead of Unicode glyphs ensures the white pieces are solid
+         * (no board shows through) and allows us to darken the black pieces via CSS filters.
+         *
+         * @param {{color: string, type: string}} piece
+         * @returns {string} relative URL to the PNG image
+         */
+        function getPieceImagePath(piece) {
+          /*
+            Return a URL pointing to a remote PNG image for the given piece.  To
+            ensure the chessboard loads correctly on all devices (including
+            iPhones, which may block access to local files), we fetch the
+            classic Wikipedia/alpha piece set hosted on chessboardjs.com.  The
+            naming scheme uses the piece colour ("w" or "b") followed by an
+            uppercase letter identifying the piece:
+
+              K – king, Q – queen, R – rook, B – bishop, N – knight, P – pawn
+
+            For example, the white queen image is at
+            `https://chessboardjs.com/img/chesspieces/wikipedia/wQ.png` and the
+            black bishop at `.../bB.png`.  This remote source is publicly
+            accessible and avoids the need for bundled assets.
+          */
+          const typeMap = { k: 'K', q: 'Q', r: 'R', b: 'B', n: 'N', p: 'P' };
+          const type = typeMap[piece.type];
+          return `https://chessboardjs.com/img/chesspieces/wikipedia/${piece.color}${type}.png`;
+        }
+
+        // Base64 encoded images for all 12 chess pieces.  Each entry maps a
+        // two-character key (colour + type, e.g. 'wk' for white king, 'bp' for
+        // black pawn) to a data URI.  Embedding these images directly into
+        // the script ensures that the game will render correctly on mobile
+        // devices (such as iPhones) where local image file access may be
+        // restricted.  The JSON file `piece_images.json` was used to
+        // generate this constant at build time.
+        const PIECE_IMAGES = {
+          'wk': 'data:image/png;base64,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',
+          'wq': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAOq0lEQVR42u2cCYxVRRaGX7M0dLPv0BB2B2SPMIA4gICypYkLwijbIFHCYgCFgCwdO0RZBllGh5mIMgkozAjijEgYZHFYJSiIqDigMGyy7/vWvJr7FVUvpy/3vXcb6deP+E5y0rfvrVN16r+1nDrn3BcIJChBCUpQghKUoAQlKEHxQ4UdbunwSMMtzb1fJRV0OF8Oytd1eJXDysUrzbNfDTV3eI7DKxxe7vAUhytEkSnh8G4BWtCw/Z9nxX4N4P3B4YuuEXTL4fMG2HA0wwLXq1ev4IEDBxTMtQByepS2Kzr8d4ePOXzK4XUO/+5+Aq+eBa1gwYLBUqVKqRIlSqh8+fJZAM5EGIkHKVOvXj21b98+ZYlr7hn5/RHabu96aXL0Ds/hUpJntASF8+fPH5w6dao6d+6cOnTokHr22WctiIzEqWFkT9Pptm3bqgsXLoQAPH/+vGrTpo0F5HQY2ToOX6DtAgUKBB966CH1yCOPqNTUVAliq/sBwKsom56errKyskIg/Pzzz3okmo4sCzMatvG8bNmyauPGjSHZDRs2qDJlyljZrWHa/RMAA97IkSPV8ePH1enTp9WSJUtUoUKFLIjL7wcAtbJ9+/ZV165dU8FgMDSKmM6mI/82u7PX2qlHGoANGTJEswHPgtDPQ66AAUeVLFlSnTx5MgT+1atXVc+ePW27N/MCkFIOpzs83uGBDlcxCocjFm391r/55ht15coVdfPmTTVlyhS9Jhog/hpBfnGEXXhRGJl7AWAB07eBpq/ppu+/iPrYhd3F0xwuHkammy1XuHDh4DPPPKMee+wxvSaa++eMYRyOmNpvOHxCtHfC3Iu0CWSbwocPH9bT+KOPPlLJycnRpjB9edOjnwcNBndFzzl83TUS5Gj4Y5iRSCcnRRhFfX22v0zILPNR/jfGTNKbSKNGjVSLFi1USkpKtE2kgBkQKkxfrxssckRlHN5glWH6nT17Vn311Vcs8FKhyhFGUUeH/yvKfm9MnCQf7WPmbBGyW3wY4VC7CC9uWJgRXMWWKVeuXJA+0lf6TN/Nsw0GE9/0W4ePItypUye9ltjNYMuWLXJBfz5KPWNFBzBsS/tsv4lr6Tho7vmhyq7TzPdRzJcBFvAvv/wyW187duxo6zhqMPFNbcxapcaOHRuqFD5z5oxcI8ZFqSfDZdD28tl+F7Pgy8W/i0/ZSq5T0Ogo5cfZsvTN9hN69dVXlVi32+QEwAYO/w/h+vXrqxs3boR2tUmTJklAOuUQwF0+2x/qsaAP9Sk71tVmho+XpctPnjw51M/r16/L0w9Y1M8JgKxTn9iKAZG3wXQWu+lRH1MywwOIllFkkh1+h7JJSUlB2Mi9Y55Fowuu9qIBWNosL3rNo4/0lT6Ll/CJz7U7G9V2+JAHALZiPzuTF4AfR5Ep6vBmyrKTwkZus3kWifp6nIEzfOj5nEtGMhjUultTpoE52+5z+KzDWWJr7+cXQOfNMnJtxxghaVEM9yvIDR48WLNp84oPw3a7BwB+AOwnTLYs09d9pu/1A/eAGjrc1Jo2Ylct7wfA0qVLq+bNm9vpf9OsU+GosW3jgw8+0CzabBxl4wPkYNGiRVWRIkX8AljeTmFhsjQ1fb7n9EYOp6MGECfCW2+9pYoVK2bl1kRwjNoNJLh3714Fi+kVaSN5l3LOERL/oXQ+RAPwY1ef3sjNc/FTHr627tEAZER8/fXX2r0kfIKtw8h8aEctZgXMtZH7MIxMTYd3UqZChQpq2bJl8mVFArC7x5r5VG4CWNWjweMRTgkhAHFPLV++XMpmOpzfQ0Yb8O3atVOXLl3SzLXY+b2ol9Xn5ZdfVlu3btVtRgGwgtHdPSCqxsRd5TouvRsNwM8//1zbV2lpaVaeRbqIx6Fe1z18+HBti8FcizbdTgyidUutPnhi1q5d6wfAdz2Oe8FYuLf0TlenTh28Lbbhyw538APgjBkzJBju00VX25G5c+eGjFquRUe7umSq2/p69Oihy9NWFAA7GJ11H+iLKbs9FgC+Zw7eas6cObJj6z02hjsAZIQYkwb+j6v8ZNuplStXhgDkWrysyR5uLK3Htm3b/ABYzOiqZegDfTH/vxcLAAfbN37ixAnVu3dvCeLIaADipe7Xr5+UqS7Kb+JejRo11HfffRcCkGvumfKbRPlCDt/gfsuWLdXly5f9ADjSgofu9EHMiMGxALCZVYB4A07LatWqBcWhv1EkACHkRJRurjg+nuReq1at1KlTp0LlueaeKX9SHKtGWV1mz54dcgJEALCRdVKgM7qji3iZzWIBYFn7xsaNG6cVnj9/vlTi22gAEutt3Lix9DanmlMPDlHtxXYT90wb54WRu9+AoXbs2BEqGwHAby3g6AzRBzECy8YCQHbBvTSIvwzC1OjcubPtoDxpeAIIDRo0yCp9zfgVezh81RmZKiMjI5sLDeIezwK3o349zWaiTx5284gC4FijWxBd0dnl89sbIUxxTynVBnAwcC198cUX0ng94HA1hye4AbSAEKpMSUmx5QkkzXL4FpvF4sWL7xiB3DMbyS0TTvibCV7puIes2wXgBKMLOmkd0dWSMNKXm77lOhGOnGmHPVE3S6+99pqcDn82xrLnCITEND7i8GGuixcvrn788cc7ynKPZ8I/p6dv9erV7yjrAjDT6KL/R0dL6C70nRnwDrXmCg2ya4kMgEMNGjSwayEjZaMXgHakGPsuW/wCkyIcCXMjVJ7sB1mnB4AbjS5aN1kfuou1e1AghpRuG541a1a2Tv7www/ugE4w3AiEkpOTs7mf7LoqAfGIUYSYk0qEERiUgKObJHQXz9NjCWALe44kA0Eu+KRzjB8/Plsnw41Aj11QR8PCEc9k2WHDhnmWc41AzeiEbnJjQndxnm8RSwBrWe/Hgw8+eAcoBLWFJ1l3ZvPmzZ6d5fQgOzp9+nS1adMmDcKaNWvUqlWr1OrVq/Wmw3SVZXFOHD16VBvnkoiuiQ1NNWnSRB07duyOnR3dTZmdv8TrfLemzFoax+8mwbM0c+ZMUjm0gkxTYg14VerWrasqV66s1zNkScWQoLAz4wyFU1NTQ8z/4jin7I6KPDspdZUvX17VqlVLsy3DsZH8GgugJOEzXBsrE0bSYntuJfQ5ZswY1aFDB5mBFZdcpUoV1adPH/XSSy9pE0iYUTGnWRECMdmYEUhmFsrj+WBKPfzww+rRRx/VG0O3bt3U008/rZOAOJ/2799fvfDCC9mYezyjDGWRQZY6qIs6qZs2aMuOfh/MDv1mXgA4yh7kLVeqVEmfWXGpExp8++23tQG8YsUKvYZt375d7d69Wx08eFB7ZUiidK9fOSFkqYO6qJO6aYO2aHPRokVaB3RBJ3RDRxeABJNG5AWAnR2+hBJdunTRrndySi5evKhTygjGe62N0SiSzN3Why7ohG7oSOIlOhsAL/lIEMgVKmqjWSTluI9q8UhWN3Z3dBbRxSKBPKJQCoazs4ZOJTkB8ZcAfjftrF+/nmks1+4hgTymzIBID5NupXgjdHOl52UG4oCSZby4Zs2aoY3hyJEj+rxJcBwj+JVXXtHW/5NPPqnat2+vmjZtqnfOihUr6sRyy9hnXizLIINss2bNdF3USd1kp9IWbdI2OtgNR3i14YkBf7k2MSHCk/+w50qRTJ6N8edhXmB/WYMZYxjbEYMYOcsYx5LlM8oigyx1UBd1UrfxGd7BRic7+vgQJ+6+Gakh4qzB2rVr61GBDTdhwgR9cMcLvHTpUn0042hHEvpPP/2kRwlue7uL4+xkxJCcDnPNPZ6x22O2IIMsdVAXdVL3vHnzdFu0SdtPPPGEQhcB3nFXHCauqL8F8PHHH/f0lMSaAJ8kdwFg/0Cc00I7bQja5DWhg5jKCwL3AdmcY3068EO3bt3SriamK0YvbLMSLNv7lKEsMn6IAJYA8Pn7AcC/WK8KxyzWLb6V27Vrl85ZWbdunXZDEU5csGCBDs6TrTBx4kTtGxw1apTerfH1EXiCueYezyhDWWSQpQ7qok7qpg3aok3aRgcRe5l9PwB42LqaOPDjwsI3SOwCUyQHh/wcM04L2qAt4i20jQ7CN3g43sH7p1fHSDkjc6B79+5qxIgRatq0aer9999Xn376qbbVyDzgY0SyBGB2WS+2zymLDLLUQV3USd20QVv4BsMAPT9ewcs0rqEghi6mxJ49e/J8E0EHnLsmfBk03pfe8QYev2Wwz0bVOG9KYtFnLcIrzKJOpwjwcLRizcKOw42PG4p1jPQ0nBOW+Z/7PGfUUZ4virABqQd7kHpx7/NVKBuNm7ARhUf7X/EG4O/tFMF1jzGLlxpDlpSMrl27Kj6i5tjF5wMPPPCATsfgOMbIIGaC254OskaSlM6JIikpSf/lf+7znHKU52SBfNWqVXV91MvRkA+zcVUxlQcMGKBGjx6tfYKfffaZdOGT8V8uXsDLluBoO+61/nAEY4Fv2LChTvclxYK0DDo6cOBAvduSTMluS8dJ5+Av/3Of5y+++KJ+MXwBz4tp3bq13qQ4g4ssA88NRujFN3y14wXA5hIgXO6ZmZlq4cKFeroxXWX2QiwIe3H//v06hQOv9Ouvv67jICIwH/NAeiSabkffzp07c833dy/IpIfYI93qWOXCRKOpFkCb5JNXIPqpW6Tz7gjEyW/Q1Bcx3SBRMfxzfGGEKcMnB3zi4BWXzS2iLdrERsSEQRd0Qjfx7R32YKF4ABC/2pgop4SgDHSnpaXpLyExeNm17UYydOjQ0CZCJI1MKphru5FQhrLIIEsd1EWdIvdaRQm58ilX23gyY5JMbIHfvOJnSfYEbv9qUFYcBNOzjC57jG78BlefQJxSSuD2h4R82s9X4mSR9jQ7Hr+EwU87zQvc/nx0lbHHdpjOcU49YTp73oQbrxm+ZO6dMmUOG5kdpo5Vps55po3xpk2bydrK6JQWLxvH3U71gmbdSTEdKWoWcvJS+OGxkoZLGS5t2P5vn5cwMsVMHammzkKBnP9aXIISlKAEJShBCUpQghKUY/o/skDmUJrSBzoAAAAASUVORK5CYII=',
+          'wr': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAEEElEQVR42u1bv0sjQRhdIwloklNMLIRg4T9hKWJxZ21x1RVidea0ukoQFbEWD6OndoLFIRbW0ShaimBt4R+gIqIW+QH5bt7ejE6WJP7CnZnje/DIkt1v3pvn7sZN5vM8BoPBYDAYDAaDwWAwGAyGm0gJjgp+b8BxwZ531CuOymMboUdqvbXeGDYFS01YETx/R73OzSbjnEutt9YbQUKwIEhgNBqlWCzmv4ItLS14vyr3v7pebav98thEg7F8LWi+sd5sgO3t7bS0tEQrKyuUy+X87f7+ft28Ol4xLi+743r1ILbxHvbJMY5lTTwwlgrQ10RNg3p7A0ylUhTE5OSkHmBeHqsTgdw2qlfAPjnGrawJjpNXOtBsUm9vgF1dXVSpVB5Nl0olmpiYUMarWpD1WO3o6GgYIPa9ZAy8QhPaCvAEb84FCOTzecpkMv4+nAWNiIBmZ2f9mmq1+livtrEPxzQbAxrQgqYOZwPUg3gp6tW8dxynA3zN5Jsd+9pxXAow3uxDxBYEPkTiNgXYIXj0zM3dJh5Jz1bht/4p2NfXR0NDQzQ4OGiU8AAvgf8Cftn6LPxHGe3t7aWTkxMqFot0d3dH9/f3oRKa0IYHeNHCg8dPtn6hEBHcUiF2dnbSxcWFsXsetOFBC29LerQaEe1M9CdwdnZGNzc3dHV1FQqhBU0ZHmlnnvXhKSQFt/X7Tjwep0QiEQqhFbjnbUtPTiGhnk3T6TQtLi5SoVCg/f39DyU0oAVN7dk74TmKGUwCZ8XBwUFo9z5oQVMGOOPyt9TTKkCcGWEBWlqA0xwgB8gBcoAcIAfIAXKAHCAHyAFygBwgB8gBcoAcIAfIAXKATgVo8Btp9wPEwsa9vb3QAoSWtpjS6QCn5CSora2NkslkKISW9/Rz5pTLAT4u2x0bG6O5uTl/jd9HEhrQ0kI8djW8b4JlwerAwAA9PDyEdglDC5rev9+Fy9KLU0gLnqpL9/DwMPH++/4J9yczzzz/WAPmAAAAAAElFTkSuQmCC',
+          'br': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAACs0lEQVR42u2bMWtaURiGL60V4YoUmiXQP+Av6OAgKrQdLk6aTB2cpLFjp0JQsNLuIhmyZe2ge8ChuuYHNKtTYoYsYtPiOT3f7Se9SiNcTa7fkfeBlxuI537vfTQSk3scBwAAAAAAAAAAAADYyQuTisn7e3Jksr/B+nkq/Nj72OdZ667fGmcmdyvy2+Ryg/XBnK04zyXPWnf9Vkia9E30iig+rrs+mD6v+R/BWeusFytQBwQmA3H5x24QQuCA17hL53Ie4AkQL/CcHxsMCbkNIfCW1yyf53zXBaoNv/9Q57D6FSghEAiBEPiPWCzm2iaQO4vhued536fTqZYOdaSu1FmSwKelUum02+3qfr9PUXyUFL9Tr9fT5XL5lDpL+zSyl0qlvrquq5PJJEXxUUL8LtTNdPwi7rNwPB6ff/nE5CDk72SPnWCHA+4Y7CyS1yZXVLpYLKpWq6UbjUakoZk0m8VdcSereGXyYzQa+W/es9ks0hA0mzpwFyv5nE6ndaFQ0LlcLtLQTJpNHWz+I+uxgPfAYwiEQAiEQAiEQAiEQAiEQAiEQAiEQAiEQAiEQAiEQAiEQAiEwEfmUz6f181mU9fr9UhDM2k2dbBZ4GAymfj/YlRKRRqCZjt/72S1kncmvzKZjKrVarparUYamkmzqQN3sYo9kwtHzu1sF9zJCl6afGu323o8HosIdaFO3E081/SsdzodZcorAQIVdeFX4rUNAqXclRVmo484gZIDgRAIgasFJhIJLej2Xj/USaLAt87i3txKNpvVw+FQ2g3mfifq5izuST7ia9gKb0xunMV9uD89zxO7xYG6Ucelzjd8LZHzgQtoy3PH1xI5tR0SWINACIRACAzJ4Q7Im+dwGwJpv+1HkxOTjqU54WvY2t5h2ndGm86eWZo4XwMAAAAAAACh+APSjxzHQG+afwAAAABJRU5ErkJggg==',
+          'bb': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAFRElEQVR42u1cXWgcVRS+abNSddXqKlYbsUjVrEJVuhUV7a+tmNj6ooLSSkJjIK4gaB7FJC9B64P4kDzUtyxqKJG2UDAtlQURBCmWPlRttVSr4k9M2zSJbkgy13N2v4k328l0ZndmN3P3fvDB7Mydc8583P85s0IYGBgYGBgYGBgYLB5cR9xI7CS+SdyAcwYe8ALxJFEW8SSuGbjgNeKsIpoF2r/5WtrI5IwHiKOKcMU10D7HZdYYuS7HnqLatxBnUdagCIc8iGfzkJFrPq4iHvYh4DAxZmSbj4wPATNGrsuxi5hbYABRB5J/iTuNXO79oNsobPo/F9xE/MulBv5JvNHI5IwdxB+JMy4C8rXTxGeMXP/jduI+h6YqXZqxxD231bJwMQwcox7FcyrzN2zU15p4ceJen8K5CbkXNmum5g2XKZ7TvZ/VwuR6ibLiKEe4hYQ8DB9aYinx4xDEKxbxI11FfNuPeIlEQg4MDOTJxz5FfEs38R4jnvdTo1paWuTU1FSefOxTQB7ZH9VFvKuJB/w23XQ6PScgH5fQlPfDd+TxRCl9Wnt7+5yAfFxiv/i4DgJ+6aX2cT/X2toqOzo6ZFtbmxwcHJTT09N58jGf42tcxkOfaPv6Iuri3eG1tmQymbkal8vl8sJZlpUnH/M5+zqX9VELG6IsYOciELAzygIe9fqgATdhlUeiLODvpU6MAxpEJGKIJK7HfKykVUcZ05jiwYRjiGRayK1+J88BTKSdyDHcEtUtq/Ol1sASl3JONZBjuDaqzfjXEDYN/PKXKA8i+xeBgJ9GWcCdIW5feV2NvBRlAfldxWQVRLR9TWAfMtJIV1HAV3XYTOA52OcVFNH2cVRolBbMCZFnlQe04vF4fnoSBNmWmJ/NelZomIS5kXicH7ChocHKZrP5jYJywTbYFtuEeN+IQlK6lriZRUylUnJsbEwGBbbFNiFeQmiM57mW1NXVyaamJtnV1SW7u7vLIttgW2wTNfA5XcW7D9OKMAcSCz6SuonH88EDFRiJ1RdKWuXLPCzc8/6CJucRrtNJwF1VWMq9rIt4MersP8Coa8nwYbGvnp6e94UOyUbNzc3xoaGhr2SFwT7Ztw41cHljY+NIb2+v7O/vl319faGSfbCvZDLJfe5yHQS8gfhzfX29jMViFSH7Yp/wHXlcI8LJCbzSVGYYviMPztXrEMFkpPrJWOWtrDpdRmLOknqdOB6SkKqtS8Q3hIY500uw0H9PFD7XkiK4JHNmDrYTQuM0X1VM3ljgFz5/YP0640O8GdzD9w5hAyHyovHu7wrincTVxHuxqL8fm5sPEteKQuboenAT8UVRyJ0e9SHgKO7hezdj/289bK+FrzXwnUQsqxHbisWyU72KuBvN5iAxS/yaeIL4LfEU8QfiGeJPxHPE34gjxDE0OVlCU3Yqk4PNEfg4B59nEMMpxHQCMWaxucGxP1tp4biP2aeIMCuCGwAqea/99wH/iMI/gjxVkZWZErQlqvO+N8ypzydhTr5bKjSXq5aI6gupR4IWjxPFL2gq3kKfSWwOcjf5nRoQr1jEd4Pc1eYPnCev0BnnUGYcqwGV4+AEOKlwQrnnoih8wsofVX8oCq9CN+H4NK5dVGw62ZpQ/DnFMelh8OMyTwfdjFuJxzBqzSKY70ThPwz4j3BeIW7HfCxFfAhMYX7Gc7UtxG3EJoVb0UVwubuIy1xiWIYyKdyztcjWNvjYAJ9qHOsQ2w7Eugexf49nsUfkY+jvQ8FK4pMYjblm3C2inbzDsd+DZ2nGs60UBgYGBgYGBgYGBgbh4j9wZbBvRaSd0wAAAABJRU5ErkJggg==',
+          'bn': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAHGklEQVR42u1ca0wcVRQeXlseWZ6a0h+YplSbBio2KfJDBQWpFYSyIWkrqaJJoSHZmrRpSbSmmrIhphhhbWI1sSVNtYCl0gTawNoaHtWQirUx2ErwB6ZWQQQUiuVR5njP7NzNdNwuC7t39m53vuQLM3cnc2e+Pffec885iyDo0KFDhw4dOnTo0KFDhw4dHiOesEL+G/DYTthP+CVhihvX5xLeJQTCXkJjoAs4LYuBHCPMdnFtCaEoX0v/vhDI4kXJookKQfA8w8m1mYQTCvHo9fWBLGC0LBiorGqIMFZxXQThD4rrlPwx0IfwnypBqHXVywLHEL6hEljJKcJQwkjCsEAUsOM+lqW2StHFZz/L9zlKWC4vNI8SBgWCgE+5EAZciEc5rzzPysqCffv23cnPz79hNBpbSdsBwuQHWcDHF7HAxTinFNpms4kLCwswNTUFY2NjQM7nTCYTLj7thBseRAEbPBDvf8P7yJEj0NfXB+Pj45KIFENDQ7B161aIj48/Q65LIgx+UIbvzCJDdFkMCwuDzMxMqK6uhp6eHpidnRWJjuLFixchNzcXrfYt1Urvd0gg7HFjjvOYsbGxkJeXB62trWiM4vT0NNTU1EBkZORl8vlj/igeDh8rS9GcMTQ0FAoLC2FmZgatES5cuAAGg2GSfPa0vwn4utryVq5cCRaLBcrLy5kLmZCQAL29vZI1XrlyRQwPD8eV/EV/ES+RcFYpIL5QV1eXY8JftWoVcxGjo6OhqalJErG7uxsXl9FF9uHcoE1tffX19ZJwoiiNLIiKitJkSJM5EBoaGqSuT548CREREb/x7jMWE/6rfIn169eDEp2dnZrOi0FBQdintELv3r0bz3/hVTyM23WpXwBXQyXS09NB68UFV+mbN2/C/Py8uGbNGmz7nEcBXyVcUD98c3OzQ7zDhw9DcHCw5gIiCwoKpCmE+IyiHLAt4kk8jJQMOPP5Nm7cCI2NjbBnzx4gq6FPxEPiF3fq1CnpizSbzdj2LWl7iBcBK109/IoVK3xmeUomJyfD7du3YXh4GOLi4rCtlAfxYn0tzFJYV1cnrcqHDh3C8z6Bg5zLF1ps17xFo9GIiwlcu3ZNROeetOX5Urws2W0R/ckKa2trJSssLi72acogRLCnKsHfBFy9erW0mODihvMzadvkCwFzCCf9SThK3AnRraU8jDX3CzG506iR9Yne7gc9gsrKSknAsrIyvC9mDsO1FPAJjayFinbX2/fOycmBubk5uHr1qijP48VaCmjTwProvdFB/8Db91+7di1cv35dssKEhATs6yOtxNuk4cLxK2Ec4YfevrfBYID29nY6jEHex0drIWCnRsP2J8JUuc8WFn0dO3ZMEvD8+fP0y0pjLV66YC8WEhmL971gT5xT9LPor6KiApNRMDIyQtteYi3gUeHewh8oKSmR6AXh6D2/Euy1Mkowsfbs7Gxpbzw5OQlpaWnY9ibLdChm2b5xsq+UgMdecFM+dtLvBlZzblJSEkxMTGASCkpLS7GtgaU7g4vH70pfqqOjwyEgHi8x4qK0Oqws2H+fft9hOeeOjo4CVjpgwl6ed5kFF3Df+4+yc5PJJFUEIPF4GVZH5ztXaccBlgJSV+bs2bO0LY6VgPiS42qPPiYmRuIy432fCK7roLcwXrSgra1NEhAzd/gegr2WhwnwxkNeWGGRfxGWudFnM2tfk7oy/f39UpBBTk0wy/d+5wXxuhT+3WLBignWAh48eFAS8NatW1L6gbRVs3RjGjx84M8E9366gMGKy1rseHAXgsBKL6w9lEN0zGASll9t1S24/7uPOsG94kuPWVRU5PAksK5GiwDrmSUMV3o8IrhfJVWmZZAWnWmKnTt3YtvfWuyHawkHZWukD3NHFXZShqLcDRW9rN7psGZGRoZDwL1790qVDFpFZdCiNssJ6gLBXrjT6+Qhy9y83zaFn6mZgKmpqQ4Bq6qqxJCQEBB8WJiZp3i4G4T5bu4t8QtY8FWumMJqtUqVr6R9neBHKNJqwXDGxMREh4AnTpyQ4oSC/VdTfoHtLHIeSyEWHlFgPaFcflLoD+I9L694Pk2LKgU8d+4c1hBi+yu8i/cw4TAPKU5Ma1JgiB+LMkm7mXcBvxY4Scgr50CbzUYF3M+zeK8JHFUzKAW8dOkSFfBtXsUzeBjRYSoglh/L9dtVvAq4Td6xcFNLQ+tkVBZo4VXAT3myPmRKSso9aQlZwBoexYuRIzJcCYhF7xSYH5bdmPd5FHAd6/yGp9GYlpYW6ki/x6OAT/Li+wmq6n2K06dP03pBLufATHVWjwfu2LHDIeDx48fpXvhdHgV8hvAPwf5PJHjh5K5du2YxsY4lHlardS4sLAxjnAd4FDBWtsLnOOKzZrN588DAQMHg4GCBxWLZQgTEuOYjgg4dOnTo0KFDhw4dOtjiP4CWD6JZC48zAAAAAElFTkSuQmCC',
+          'bp': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAC0ElEQVR42u2cPWgUQRSAP82PRjQSBUHTWamgIIiiEkWtAgo2goggKWxEQ4SoCGJiIYrVlYKiKAEbG8EUFlbaBBQ7f2JjoyCRIMZfojcWc0uWMTHJ3k7yZuZ98Jrj2Fu+ezv3Zt7jQFEURVEURVEURVEURVGUgiwGzgJDwAjwCXgDXAPaVc/ULAC6gHHA1KJaC5OLPqBJdf0rr98RZ5zIv/YAWK7aJuiaRt5kIm9qJk6seeMzlJeP78Be1QfnCsjL3lvRLLS/tqZgvACWpS5wZJbZl49vQJsKVIF18bKOR/g10Jq6wMsFxOVLmebUBbYWzL5fQKcWMXCpjkf4durbt0qBGtDdIw8CjSkK7K0j89y18H5qBfX2gtu3/0nsS0ng25Lk5eMdsDEFeYc8yMuudR5YGLvApyWKcwU+B5bGLG8F8Lnk7HMj6mP/fcBXTwKzax6MWeBR4IfH7DPA6ZgFHgd+ehZ4MWaBh7FH8T4FnoxZ4Fbgiydx2Rq4K2aBDcBHj9n3mwQOWO95LKQfAi2xC9zgQWAWx1LZC9/1IPEZsCoVgW3A+xLljdX22EnRie2qlSHwSmryVgMDJQocBDpSkbffOVAo60B1DOiOXV4PU8/9lSHRYAcxG2KU1wv88VhE57+UO8CSmOSdqu0SfNV/k2XjDWBRLGuemSN5bvRg26fB0o7/E+jp1sRNocprwvZr5yPz8p85TKDzMwfm4PB0NpOsQdECPJ7H7HNjFFgfksAOQfKy+7geksAnwgQa4BWwNgR56wRJc+NICAIrArMvu5eBEIrrD4IzcBThPZPN2K5bVaC87J62SRbYjZ1dNoIFXpUs8JbgxzeLIanymoFHAQisShW4BtsZky7P1FoKIuu/4QAy0AA7JQrcIryEEV9Q78D+QUQIAk9IFLgbf5NXZccZiQL3YFuLIQi8IFFgI3aIfGUAEf0El6IoiqIoiuKfv3U5xct5ETXIAAAAAElFTkSuQmCC',
+        };
+
+        // Board state: 8x8 array storing pieces or null.
+        let board = [];
+        // Current player: 'w' for white, 'b' for black.
+        let currentPlayer = 'w';
+        // Selected square coordinates when a piece is picked.
+        let selected = null;
+        // Timing variables (seconds). Default to 5 minutes per side but can be changed
+        let initialTime = 5 * 60; // 5 minutes per player
+        let whiteTime = initialTime;
+        let blackTime = initialTime;
+        // Timer interval handle.
+        let timerInterval = null;
+        let paused = false;
+        // Game over flag
+        let gameOver = false;
+
+        // Variable to track en passant possibilities. Will hold an object
+        // like { target: {r, c}, capture: {r, c} } when a pawn moves two squares,
+        // allowing the opponent to capture en passant on the next move.
+        let enPassant = null;
+
+        // Array of squares {r, c} representing legal moves for the currently selected piece.
+        // Used to highlight potential moves on the board.
+        let legalTargets = [];
+
+        // Audio context and sound for piece movement
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        /**
+         * Plays a short sound to indicate a piece move.
+         */
+        function playMoveSound() {
+          // Generate a short percussive sound reminiscent of a wooden chess piece
+          // hitting a wooden board. We use two sine waves (one low and one mid)
+          // with a quick decay envelope; no noise component is added to avoid
+          // harshness. The frequencies and envelope have been tuned by ear.
+          if (audioContext.state === 'suspended') {
+            audioContext.resume();
+          }
+          const duration = 0.12; // seconds
+          const sampleRate = audioContext.sampleRate;
+          const frames = Math.floor(sampleRate * duration);
+          const buffer = audioContext.createBuffer(1, frames, sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < frames; i++) {
+            const t = i / sampleRate;
+            // Quick exponential decay for percussive effect
+            const envelope = Math.exp(-40 * t);
+            // Fundamental low frequency (~180 Hz) for the thud
+            const low = Math.sin(2 * Math.PI * 180 * t);
+            // Higher harmonic (~700 Hz) for the click
+            const high = 0.5 * Math.sin(2 * Math.PI * 700 * t);
+            data[i] = envelope * (low + high);
+          }
+          const source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          const gainNode = audioContext.createGain();
+          gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
+          source.connect(gainNode).connect(audioContext.destination);
+          source.start();
+        }
+
+        /**
+         * Helper function to create a new piece with a given color and type.
+         * Adds a hasMoved flag used for castling logic.
+         * @param {string} color 'w' or 'b'
+         * @param {string} type 'k','q','r','b','n','p'
+         */
+        function createPiece(color, type) {
+          return { color, type, hasMoved: false };
+        }
+
+        // Initialize board with starting positions.
+        function initBoard() {
+          board = [];
+          for (let r = 0; r < 8; r++) {
+            board[r] = [];
+            for (let c = 0; c < 8; c++) {
+              board[r][c] = null;
+            }
+          }
+          // Place black pieces
+          board[0][0] = createPiece('b', 'r');
+          board[0][1] = createPiece('b', 'n');
+          board[0][2] = createPiece('b', 'b');
+          board[0][3] = createPiece('b', 'q');
+          board[0][4] = createPiece('b', 'k');
+          board[0][5] = createPiece('b', 'b');
+          board[0][6] = createPiece('b', 'n');
+          board[0][7] = createPiece('b', 'r');
+          for (let c = 0; c < 8; c++) {
+            board[1][c] = createPiece('b', 'p');
+            board[6][c] = createPiece('w', 'p');
+          }
+          // Place white pieces
+          board[7][0] = createPiece('w', 'r');
+          board[7][1] = createPiece('w', 'n');
+          board[7][2] = createPiece('w', 'b');
+          board[7][3] = createPiece('w', 'q');
+          board[7][4] = createPiece('w', 'k');
+          board[7][5] = createPiece('w', 'b');
+          board[7][6] = createPiece('w', 'n');
+          board[7][7] = createPiece('w', 'r');
+        }
+
+        // Render the board UI based on the board state.
+        function renderBoard() {
+          const boardDiv = document.getElementById('board');
+          boardDiv.innerHTML = '';
+          // loop rows and columns
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const square = document.createElement('div');
+              square.classList.add('square');
+              // Determine square color
+              if ((r + c) % 2 === 0) {
+                square.classList.add('light');
+              } else {
+                square.classList.add('dark');
+              }
+              square.dataset.row = r;
+              square.dataset.col = c;
+              // Assign algebraic file (a‑h) and rank (8‑1) labels to each square.
+              square.dataset.file = String.fromCharCode(97 + c); // 'a' + column index
+              square.dataset.rank = (8 - r).toString();          // ranks 8 down to 1
+              // Only display file letters on the bottom row, and rank numbers on the leftmost column
+              if (r === 7) {
+                square.dataset.showFile = 'true';
+              }
+              if (c === 0) {
+                square.dataset.showRank = 'true';
+              }
+              const piece = board[r][c];
+              if (piece) {
+                // Render each piece using a PNG image.  Using actual images ensures
+                // that white pieces are fully opaque with crisp black contours and
+                // black pieces are solid with white edges.  The images are stored
+                // in the `img/alpha` folder; see getPieceImagePath().  We size
+                // them to nearly fill the square via CSS classes defined above.
+                const img = document.createElement('img');
+                img.classList.add('piece-img');
+                img.classList.add(piece.color === 'w' ? 'white-img' : 'black-img');
+                img.src = getPieceImagePath(piece);
+                square.appendChild(img);
+              }
+              // Apply selection highlight if this square is the selected origin
+              if (selected && selected.r === r && selected.c === c) {
+                square.classList.add('selected');
+              }
+              // Apply legal move highlight if this square is a potential destination
+              if (legalTargets && legalTargets.some(t => t.r === r && t.c === c)) {
+                square.classList.add('legal-move');
+              }
+              // Add click handler
+              square.addEventListener('click', onSquareClick);
+              boardDiv.appendChild(square);
+            }
+          }
+        }
+
+        function updateClocks() {
+          if (paused || gameOver) return;
+          if (currentPlayer === 'w') {
+            whiteTime--;
+            if (whiteTime <= 0) {
+              whiteTime = 0;
+              endGame('Black wins on time');
+            }
+          } else {
+            blackTime--;
+            if (blackTime <= 0) {
+              blackTime = 0;
+              endGame('White wins on time');
+            }
+          }
+          // Update only the time portions of each clock display
+          const whiteClock = document.querySelector('#white-clock .clock-time');
+          const blackClock = document.querySelector('#black-clock .clock-time');
+          if (whiteClock) whiteClock.textContent = formatTime(whiteTime);
+          if (blackClock) blackClock.textContent = formatTime(blackTime);
+        }
+
+        function formatTime(seconds) {
+          const m = Math.floor(seconds / 60).toString().padStart(2,'0');
+          const s = (seconds % 60).toString().padStart(2,'0');
+          return m + ':' + s;
+        }
+
+        function startTimer() {
+          if (timerInterval) clearInterval(timerInterval);
+          timerInterval = setInterval(updateClocks, 1000);
+        }
+
+        // Determine if a move is legal.
+        function isLegalMove(from, to, color) {
+          const piece = board[from.r][from.c];
+          if (!piece || piece.color !== color) return false;
+          const dest = board[to.r][to.c];
+          // cannot capture own piece
+          if (dest && dest.color === color) return false;
+          const dx = to.c - from.c;
+          const dy = to.r - from.r;
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+          switch (piece.type) {
+            case 'p': {
+              // Pawn movement direction depends on color (white moves up (negative y), black down (positive y))
+              const direction = piece.color === 'w' ? -1 : 1;
+              // Forward move
+              if (dx === 0) {
+                // single move
+                if (dy === direction && !dest) {
+                  return !wouldCauseSelfCheck(from, to, piece);
+                }
+                // double move from starting rank
+                const startRow = piece.color === 'w' ? 6 : 1;
+                if (from.r === startRow && dy === 2 * direction && !dest) {
+                  // path must be clear
+                  const betweenRow = from.r + direction;
+                  if (!board[betweenRow][from.c]) {
+                    return !wouldCauseSelfCheck(from, to, piece);
+                  }
+                }
+              } else if (absDx === 1 && dy === direction) {
+                // capture diagonally
+                // Normal capture
+                if (dest && dest.color !== piece.color) {
+                  return !wouldCauseSelfCheck(from, to, piece);
+                }
+                // En passant capture: dest is empty but matches enPassant target
+                if (!dest && enPassant && enPassant.target.r === to.r && enPassant.target.c === to.c) {
+                  // Simulate en passant capture and check if king would be in check
+                  const victimPos = enPassant.capture;
+                  const capturedPiece = board[victimPos.r][victimPos.c];
+                  // Perform move: remove captured pawn, move the attacking pawn
+                  board[victimPos.r][victimPos.c] = null;
+                  board[to.r][to.c] = piece;
+                  board[from.r][from.c] = null;
+                  const inCheck = isInCheck(piece.color);
+                  // Undo move
+                  board[from.r][from.c] = piece;
+                  board[to.r][to.c] = dest;
+                  board[victimPos.r][victimPos.c] = capturedPiece;
+                  return !inCheck;
+                }
+              }
+              return false;
+            }
+            case 'r': {
+              // Rook: horizontal or vertical
+              if (dx !== 0 && dy !== 0) return false;
+              const stepX = dx === 0 ? 0 : dx / absDx;
+              const stepY = dy === 0 ? 0 : dy / absDy;
+              let x = from.c + stepX;
+              let y = from.r + stepY;
+              while (x !== to.c || y !== to.r) {
+                if (board[y][x]) return false;
+                x += stepX;
+                y += stepY;
+              }
+              return !wouldCauseSelfCheck(from, to, piece);
+            }
+            case 'n': {
+              // Knight: L shape
+              const legal = (absDx === 1 && absDy === 2) || (absDx === 2 && absDy === 1);
+              if (!legal) return false;
+              return !wouldCauseSelfCheck(from, to, piece);
+            }
+            case 'b': {
+              // Bishop: diagonal
+              if (absDx !== absDy) return false;
+              const stepX = dx / absDx;
+              const stepY = dy / absDy;
+              let x = from.c + stepX;
+              let y = from.r + stepY;
+              while (x !== to.c || y !== to.r) {
+                if (board[y][x]) return false;
+                x += stepX;
+                y += stepY;
+              }
+              return !wouldCauseSelfCheck(from, to, piece);
+            }
+            case 'q': {
+              // Queen: rook + bishop
+              if (dx === 0 || dy === 0) {
+                // rook-like
+                const stepX = dx === 0 ? 0 : dx / absDx;
+                const stepY = dy === 0 ? 0 : dy / absDy;
+                let x = from.c + stepX;
+                let y = from.r + stepY;
+                while (x !== to.c || y !== to.r) {
+                  if (board[y][x]) return false;
+                  x += stepX;
+                  y += stepY;
+                }
+                return !wouldCauseSelfCheck(from, to, piece);
+              } else if (absDx === absDy) {
+                // bishop-like
+                const stepX = dx / absDx;
+                const stepY = dy / absDy;
+                let x = from.c + stepX;
+                let y = from.r + stepY;
+                while (x !== to.c || y !== to.r) {
+                  if (board[y][x]) return false;
+                  x += stepX;
+                  y += stepY;
+                }
+                return !wouldCauseSelfCheck(from, to, piece);
+              }
+              return false;
+            }
+            case 'k': {
+              // King: one square any direction
+              if (absDx <= 1 && absDy <= 1) {
+                return !wouldCauseSelfCheck(from, to, piece);
+              }
+              // Castling: move two squares horizontally on first move
+              if (absDx === 2 && dy === 0 && !piece.hasMoved) {
+                const row = from.r;
+                // Determine side
+                if (dx === 2) {
+                  // King-side castling (to the right)
+                  const rook = board[row][7];
+                  if (
+                    rook && rook.type === 'r' && rook.color === piece.color && !rook.hasMoved &&
+                    !board[row][5] && !board[row][6] &&
+                    !isInCheck(piece.color) &&
+                    !wouldCauseSelfCheck(from, { r: row, c: from.c + 1 }, piece) &&
+                    !wouldCauseSelfCheck(from, { r: row, c: from.c + 2 }, piece)
+                  ) {
+                    return true;
+                  }
+                } else if (dx === -2) {
+                  // Queen-side castling (to the left)
+                  const rook = board[row][0];
+                  if (
+                    rook && rook.type === 'r' && rook.color === piece.color && !rook.hasMoved &&
+                    !board[row][1] && !board[row][2] && !board[row][3] &&
+                    !isInCheck(piece.color) &&
+                    !wouldCauseSelfCheck(from, { r: row, c: from.c - 1 }, piece) &&
+                    !wouldCauseSelfCheck(from, { r: row, c: from.c - 2 }, piece)
+                  ) {
+                    return true;
+                  }
+                }
+                return false;
+              }
+              return false;
+            }
+            default:
+              return false;
+          }
+        }
+
+        // Check if moving the piece from `from` to `to` would leave the moving player's king in check.
+        function wouldCauseSelfCheck(from, to, piece) {
+          const origPiece = board[to.r][to.c];
+          // Perform the move
+          board[to.r][to.c] = piece;
+          board[from.r][from.c] = null;
+          const inCheck = isInCheck(piece.color);
+          // Undo the move
+          board[from.r][from.c] = piece;
+          board[to.r][to.c] = origPiece;
+          return inCheck;
+        }
+
+        // Determine if the given color is currently in check.
+        function isInCheck(color) {
+          // Find king position
+          let kingPos = null;
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const piece = board[r][c];
+              if (piece && piece.color === color && piece.type === 'k') {
+                kingPos = {r, c};
+                break;
+              }
+            }
+            if (kingPos) break;
+          }
+          if (!kingPos) return true; // Shouldn't happen
+          // Check if any opponent piece can attack king
+          const opponent = color === 'w' ? 'b' : 'w';
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const piece = board[r][c];
+              if (piece && piece.color === opponent) {
+                if (canAttack({r, c}, kingPos, piece)) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        }
+
+        // Determine if a piece at 'from' can attack 'to' square.
+        function canAttack(from, to, piece) {
+          const dx = to.c - from.c;
+          const dy = to.r - from.r;
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+          switch (piece.type) {
+            case 'p': {
+              const dir = piece.color === 'w' ? -1 : 1;
+              return absDx === 1 && dy === dir;
+            }
+            case 'r': {
+              if (dx !== 0 && dy !== 0) return false;
+              const stepX = dx === 0 ? 0 : dx / absDx;
+              const stepY = dy === 0 ? 0 : dy / absDy;
+              let x = from.c + stepX;
+              let y = from.r + stepY;
+              while (x !== to.c || y !== to.r) {
+                if (board[y][x]) return false;
+                x += stepX;
+                y += stepY;
+              }
+              return true;
+            }
+            case 'n': {
+              return (absDx === 1 && absDy === 2) || (absDx === 2 && absDy === 1);
+            }
+            case 'b': {
+              if (absDx !== absDy) return false;
+              const stepX = dx / absDx;
+              const stepY = dy / absDy;
+              let x = from.c + stepX;
+              let y = from.r + stepY;
+              while (x !== to.c || y !== to.r) {
+                if (board[y][x]) return false;
+                x += stepX;
+                y += stepY;
+              }
+              return true;
+            }
+            case 'q': {
+              if (dx === 0 || dy === 0) {
+                // Rook-like
+                const stepX = dx === 0 ? 0 : dx / absDx;
+                const stepY = dy === 0 ? 0 : dy / absDy;
+                let x = from.c + stepX;
+                let y = from.r + stepY;
+                while (x !== to.c || y !== to.r) {
+                  if (board[y][x]) return false;
+                  x += stepX;
+                  y += stepY;
+                }
+                return true;
+              } else if (absDx === absDy) {
+                // Bishop-like
+                const stepX = dx / absDx;
+                const stepY = dy / absDy;
+                let x = from.c + stepX;
+                let y = from.r + stepY;
+                while (x !== to.c || y !== to.r) {
+                  if (board[y][x]) return false;
+                  x += stepX;
+                  y += stepY;
+                }
+                return true;
+              }
+              return false;
+            }
+            case 'k': {
+              return absDx <= 1 && absDy <= 1;
+            }
+            default:
+              return false;
+          }
+        }
+
+        // Handle click on a square
+        function onSquareClick(e) {
+          if (gameOver) return;
+          const row = parseInt(e.currentTarget.dataset.row);
+          const col = parseInt(e.currentTarget.dataset.col);
+          const clickedPiece = board[row][col];
+          // If no selection yet
+          if (!selected) {
+            // If clicking on a piece of the current player, select it and highlight its moves
+            if (clickedPiece && clickedPiece.color === currentPlayer) {
+              selected = { r: row, c: col };
+              // Compute legal moves for this piece
+              legalTargets = [];
+              for (let tr = 0; tr < 8; tr++) {
+                for (let tc = 0; tc < 8; tc++) {
+                  if (isLegalMove(selected, { r: tr, c: tc }, currentPlayer)) {
+                    legalTargets.push({ r: tr, c: tc });
+                  }
+                }
+              }
+              // Re-render board to show highlights
+              renderBoard();
+            }
+            return;
+          }
+          // Already selected, handle move or reselection
+          if (row === selected.r && col === selected.c) {
+            // Deselect: clear selection and legal targets
+            selected = null;
+            legalTargets = [];
+            renderBoard();
+            return;
+          }
+          // If clicked on another of same color piece, switch selection
+          if (clickedPiece && clickedPiece.color === currentPlayer) {
+            selected = { r: row, c: col };
+            // Compute legal moves for the new selection
+            legalTargets = [];
+            for (let tr = 0; tr < 8; tr++) {
+              for (let tc = 0; tc < 8; tc++) {
+                if (isLegalMove(selected, { r: tr, c: tc }, currentPlayer)) {
+                  legalTargets.push({ r: tr, c: tc });
+                }
+              }
+            }
+            renderBoard();
+            return;
+          }
+          // Attempt to move to a valid square
+          const from = { r: selected.r, c: selected.c };
+          const toCoord = { r: row, c: col };
+          if (isLegalMove(from, toCoord, currentPlayer)) {
+            // Clear selection and legalTargets before moving so that renderBoard called from movePiece doesn't use stale data
+            selected = null;
+            legalTargets = [];
+            movePiece(from, toCoord);
+          } else {
+            // If move is illegal, just clear selection and highlights
+            selected = null;
+            legalTargets = [];
+            renderBoard();
+          }
+        }
+
+        function movePiece(from, to) {
+          const piece = board[from.r][from.c];
+          const dest = board[to.r][to.c];
+          const dx = to.c - from.c;
+          // Handle castling: if king moves two squares horizontally
+          if (piece.type === 'k' && Math.abs(dx) === 2) {
+            const row = from.r;
+            if (dx > 0) {
+              // King-side castling: move rook from h-file (col 7) to f-file (col 5)
+              const rook = board[row][7];
+              if (rook) {
+                board[row][5] = rook;
+                board[row][7] = null;
+                rook.hasMoved = true;
+              }
+            } else {
+              // Queen-side castling: move rook from a-file (col 0) to d-file (col 3)
+              const rook = board[row][0];
+              if (rook) {
+                board[row][3] = rook;
+                board[row][0] = null;
+                rook.hasMoved = true;
+              }
+            }
+          }
+          // Handle en passant capture before moving the piece
+          if (piece.type === 'p' && dest == null && enPassant && to.r === enPassant.target.r && to.c === enPassant.target.c) {
+            // Remove the captured pawn
+            const victim = enPassant.capture;
+            board[victim.r][victim.c] = null;
+          }
+          // Move piece to destination
+          board[to.r][to.c] = piece;
+          board[from.r][from.c] = null;
+          // Mark piece as moved (used for castling)
+          piece.hasMoved = true;
+
+          // Pawn promotion to queen
+          if (piece.type === 'p') {
+            if (piece.color === 'w' && to.r === 0) {
+              piece.type = 'q';
+            }
+            if (piece.color === 'b' && to.r === 7) {
+              piece.type = 'q';
+            }
+          }
+
+          // Clear any previous en passant information
+          enPassant = null;
+          // Set new en passant opportunity if a pawn moved two squares
+          if (piece.type === 'p' && Math.abs(to.r - from.r) === 2) {
+            const direction = piece.color === 'w' ? -1 : 1;
+            enPassant = {
+              target: { r: from.r + direction, c: from.c },
+              capture: { r: to.r, c: to.c }
+            };
+          }
+
+          // Play move sound effect
+          playMoveSound();
+
+          renderBoard();
+          // After move, check for checkmate or stalemate
+          const opponent = currentPlayer === 'w' ? 'b' : 'w';
+          if (isInCheck(opponent)) {
+            if (!hasAnyLegalMove(opponent)) {
+              endGame((currentPlayer === 'w' ? 'White' : 'Black') + ' wins by checkmate!');
+              return;
+            } else {
+              // Indicate check
+              setStatus((currentPlayer === 'w' ? 'Black' : 'White') + ' is in check!');
+            }
+          } else {
+            // Stalemate check
+            if (!hasAnyLegalMove(opponent)) {
+              endGame('Stalemate! It\'s a draw.');
+              return;
+            }
+            setStatus('');
+          }
+          // Switch player and update timers
+          currentPlayer = opponent;
+        }
+
+        // Determine if a player has any legal move
+        function hasAnyLegalMove(color) {
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const piece = board[r][c];
+              if (piece && piece.color === color) {
+                for (let tr = 0; tr < 8; tr++) {
+                  for (let tc = 0; tc < 8; tc++) {
+                    const dest = board[tr][tc];
+                    if (dest && dest.color === color) continue;
+                    if (isLegalMove({r, c}, {r: tr, c: tc}, color)) {
+                      return true;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          return false;
+        }
+
+        function endGame(message) {
+          gameOver = true;
+          clearInterval(timerInterval);
+          // Clear any selection and legal move highlights at game end
+          selected = null;
+          legalTargets = [];
+          renderBoard();
+          setStatus(message);
+        }
+
+        function setStatus(message) {
+          const statusEl = document.getElementById('status');
+          statusEl.textContent = message;
+        }
+
+        // Pause/resume handler
+        document.getElementById('pause').addEventListener('click', function() {
+          if (gameOver) return;
+          paused = !paused;
+          this.textContent = paused ? 'Resume' : 'Pause';
+        });
+
+        // (Removed) Set clock handler: previously used to set the clock and reset the game. The
+        // functionality has been merged into the New Game button. When a new game
+        // is started, the time specified in the clock input is applied.
+
+        // Draw button handler: end the game as a draw by agreement.
+        document.getElementById('draw').addEventListener('click', function() {
+          if (!gameOver) {
+            endGame('Draw by agreement');
+          }
+        });
+
+        // New game handler: reset the game to the initial state.  It also reads the
+        // minutes value from the clock input and applies it as the new time
+        // control.  This consolidates the previous "Set Clock" functionality
+        // into a single button.
+        document.getElementById('new-game').addEventListener('click', function() {
+          const inputEl = document.getElementById('clock-input');
+          const minutes = parseInt(inputEl.value, 10);
+          if (!isNaN(minutes) && minutes > 0) {
+            initialTime = minutes * 60;
+          }
+          init();
+        });
+
+        // Initialize the game
+        function init() {
+          initBoard();
+          renderBoard();
+          // Reset timers
+          whiteTime = initialTime;
+          blackTime = initialTime;
+          // Initialize clock displays by updating only the time elements
+          const whiteClockEl = document.querySelector('#white-clock .clock-time');
+          const blackClockEl = document.querySelector('#black-clock .clock-time');
+          if (whiteClockEl) whiteClockEl.textContent = formatTime(whiteTime);
+          if (blackClockEl) blackClockEl.textContent = formatTime(blackTime);
+          currentPlayer = 'w';
+          gameOver = false;
+          paused = false;
+          // Reset en passant target when starting a new game
+          enPassant = null;
+          // Clear any selection or highlights from previous game
+          selected = null;
+          legalTargets = [];
+          document.getElementById('pause').textContent = 'Pause';
+          setStatus('');
+          startTimer();
+        }
+
+        // Start the game on load
+        init();
+      })();
+    </script>
+  </body>
+</html>
